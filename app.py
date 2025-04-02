@@ -1,66 +1,111 @@
 import streamlit as st
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
-import torch
-import torch.nn.functional as F
+import re
+import textstat
 import difflib
+import requests
+from typing import List
 
-# NLTK for sentence tokenization
-import nltk
-nltk.download('punkt', quiet=True)
-from nltk.tokenize import sent_tokenize
+# ------------------------------
+# CONFIG
+# ------------------------------
+st.set_page_config(page_title="AI Text Checker", layout="wide")
+st.title("🧠 AI Text Detection & Style Comparison Tool")
 
-# Load model (fine-tuned for AI/human text classification)
-tokenizer = AutoTokenizer.from_pretrained("roberta-base-openai-detector")
-model = AutoModelForSequenceClassification.from_pretrained("roberta-base-openai-detector")
+# ------------------------------
+# FUNCTIONS
+# ------------------------------
+def split_sentences(text):
+    return re.split(r'(?<=[.!?]) +', text.strip())
 
-# Page layout
-st.set_page_config(page_title="AI Text Detector", layout="wide")
-st.title("🧠 AI Text Detector - Check for Humanness")
+def calculate_humanness(sentence: str):
+    try:
+        readability = textstat.flesch_reading_ease(sentence)
+        complexity = textstat.sentence_complexity(sentence)
+        syllables = textstat.syllable_count(sentence)
+        ai_score = 0
+        if readability > 60:
+            ai_score += 0.2
+        if complexity < 1.5:
+            ai_score += 0.4
+        if syllables < 20:
+            ai_score += 0.4
+        return round((1 - ai_score) * 100, 2)
+    except:
+        return 50
 
-# Input fields
-user_input = st.text_area("Paste the text you want to analyze:", height=250)
-user_reference = st.text_area("(Optional) Paste your own previous writing for comparison:", height=150)
-
-# Button to trigger detection
-if st.button("Analyze Text") and user_input:
-    with st.spinner("Analyzing text..."):
-        # Split into sentences
-        sentences = sent_tokenize(user_input)
-        suspicious_sentences = []
-        humanness_scores = []
-
-        for sent in sentences:
-            inputs = tokenizer(sent, return_tensors="pt", truncation=True, padding=True)
-            with torch.no_grad():
-                outputs = model(**inputs)
-                probs = F.softmax(outputs.logits, dim=1)
-                human_prob = probs[0][0].item()
-                humanness_scores.append(human_prob)
-
-                if human_prob < 0.5:
-                    suspicious_sentences.append((sent, human_prob))
-
-        avg_score = sum(humanness_scores) / len(humanness_scores)
-
-        st.subheader("🔎 Results")
-        st.markdown(f"**Overall Humanness Score:** `{avg_score * 100:.2f}%`")
-
-        if suspicious_sentences:
-            st.warning("Suspicious sentences (likely AI-generated):")
-            for sent, score in suspicious_sentences:
-                st.markdown(f"> *{sent}* — `{score * 100:.2f}% human-like`")
+def highlight_sentences(text):
+    sentences = split_sentences(text)
+    highlights = []
+    for s in sentences:
+        score = calculate_humanness(s)
+        if score < 50:
+            highlights.append((s, '🔴'))
+        elif score < 75:
+            highlights.append((s, '🟡'))
         else:
-            st.success("No suspicious sentences detected. Your writing looks human!")
+            highlights.append((s, '🟢'))
+    return highlights
 
-        # Optional comparison to user's writing
-        if user_reference:
-            st.subheader("🧬 Similarity Check to Your Writing")
-            similarity = difflib.SequenceMatcher(None, user_input, user_reference).ratio()
-            st.markdown(f"**Similarity to your own writing:** `{similarity * 100:.2f}%`")
-            if similarity < 0.5:
-                st.info("This writing differs significantly from your reference style.")
-            else:
-                st.success("This writing is quite similar to your reference style.")
+def compare_to_sample(user_text, sample_text):
+    user_sents = split_sentences(user_text.lower())
+    sample_sents = split_sentences(sample_text.lower())
+    matcher = difflib.SequenceMatcher(None, ' '.join(user_sents), ' '.join(sample_sents))
+    return round(matcher.ratio() * 100, 2)
+
+def detect_with_api(text, api_key):
+    try:
+        url = "https://api.gptzero.me/v2/predict"  # Replace with your preferred API
+        headers = {"Authorization": f"Bearer {api_key}"}
+        response = requests.post(url, json={"document": text}, headers=headers)
+        if response.status_code == 200:
+            result = response.json()
+            return result.get("documents", [{}])[0].get("score", None)
+        return None
+    except:
+        return None
+
+# ------------------------------
+# INPUTS
+# ------------------------------
+input_text = st.text_area("Paste text to analyze", height=300)
+style_file = st.file_uploader("Upload your writing sample (optional)", type=["txt"])
+
+st.sidebar.header("🔧 Options")
+use_api = st.sidebar.checkbox("Use external AI detection API")
+api_key = st.sidebar.text_input("Enter API key", type="password")
+
+# ------------------------------
+# ANALYSIS
+# ------------------------------
+if st.button("Analyze") and input_text:
+    with st.spinner("Analyzing text..."):
+        sample_text = style_file.read().decode("utf-8") if style_file else None
+
+        # LOCAL HEURISTIC
+        highlights = highlight_sentences(input_text)
+        avg_human_score = round(sum([calculate_humanness(s[0]) for s in highlights]) / len(highlights), 2)
+
+        # STYLE COMPARISON
+        style_match = compare_to_sample(input_text, sample_text) if sample_text else None
+
+        # OPTIONAL API DETECTION
+        api_score = detect_with_api(input_text, api_key) if (use_api and api_key) else None
+
+    st.subheader("🔍 Humanness Score")
+    st.metric("Estimated Human-Likeness", f"{avg_human_score}%")
+
+    if api_score:
+        st.metric("Advanced AI Detection (API)", f"{round(api_score*100)}% AI-likely")
+
+    if style_match is not None:
+        st.metric("Style Match to Your Writing", f"{style_match}%")
+
+    st.subheader("✨ Sentence Analysis")
+    for sentence, level in highlights:
+        color = {"🔴": "#ffdddd", "🟡": "#fff6cc", "🟢": "#ddffdd"}[level]
+        st.markdown(f"<div style='background-color:{color};padding:5px;border-radius:5px'>{level} {sentence}</div>", unsafe_allow_html=True)
+else:
+    st.info("Paste some text and click Analyze to begin.")
 
 st.markdown("---")
-st.markdown("Made with ❤️ using RoBERTa AI detection and Streamlit.")
+st.caption("Built for writers, editors, and curious minds 💡")

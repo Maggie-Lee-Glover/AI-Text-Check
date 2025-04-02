@@ -1,29 +1,21 @@
-# 🧠 AI Text Detector
+# 🧠 AI Text Detection & Style Comparison Tool
 
-This web app helps you **analyze written text for signs of AI generation**. It estimates the humanness of writing, highlights suspicious sentences, and even compares it against your own writing style.
-
-Built using [Streamlit](https://streamlit.io/), [Hugging Face Transformers](https://huggingface.co/transformers/), and a RoBERTa-based AI text classifier.
-
----
+This web app helps you analyze any written text to detect signs of AI generation and compare it with your own writing style.
 
 ## 🚀 Features
 
-- ✍️ **Humanness Score** – See how likely your text is to be human-written
-- 🚨 **Suspicious Sentence Highlighting** – Identify sentences that seem AI-generated
-- 🧬 **Style Similarity Check** – Compare the input to your own past writing
-- 💡 Simple and easy-to-use web interface
+- ✅ Estimates how “human” a piece of text sounds
+- ✨ Highlights suspicious AI-like sentences
+- 🧍‍♀️ Compares uploaded text to your own writing style
+- 🔐 Optional API-based AI detection (e.g., GPTZero)
+- 🌈 Simple, beautiful UI powered by Streamlit
 
 ---
 
-## 🖥️ Live App
+## 📦 Installation
 
-👉 [Click here to try the app online](https://share.streamlit.io/) *(link will appear after deployment)*
+1. Clone this repo or download the files.
 
----
-
-## 🛠️ How to Run Locally
-
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/Maggie-Lee-Glover/AI-Text-Check.git
-   cd AI-Text-Check
+```bash
+git clone https://github.com/your-username/ai-text-detector.git
+cd ai-text-detector
